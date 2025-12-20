@@ -26,8 +26,8 @@ type UiParams = {
   steps: number;
   guidance: number;
   seed: number | "";
-  numImages: 1; // keep 1 for now; UI is ready if your worker supports >1 later
-  format: "png"; // keep fixed unless backend supports others
+  numImages: 1;
+  format: "png";
 };
 
 const DEFAULT_PARAMS: UiParams = {
@@ -64,11 +64,9 @@ function formatTime(ms: number) {
 }
 
 export default function Page() {
-  // Primary inputs
   const [prompt, setPrompt] = useState<string>("");
   const [negativePrompt, setNegativePrompt] = useState<string>("");
 
-  // Advanced params
   const [params, setParams] = useState<UiParams>(DEFAULT_PARAMS);
   const normalizedParams = useMemo(() => {
     return {
@@ -79,20 +77,16 @@ export default function Page() {
     } as UiParams;
   }, [params]);
 
-  // Job state
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<"IDLE" | "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED">("IDLE");
   const [error, setError] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
-  // UX state
   const [elapsedMs, setElapsedMs] = useState<number>(0);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
-  // History
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
-  // Abort/poll control
   const pollTimerRef = useRef<number | null>(null);
   const startTsRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -190,7 +184,6 @@ export default function Page() {
         return;
       }
 
-      // FAILED / CANCELLED
       const msg = data.error || "Generation failed";
       setStatus(s);
       setError(msg);
@@ -204,7 +197,6 @@ export default function Page() {
     (jid: string, historyId: string) => {
       clearPoll();
 
-      // initial immediate poll
       pollStatus(jid, historyId).catch((e) => {
         const msg = e?.message || "Polling error";
         setStatus("FAILED");
@@ -228,7 +220,6 @@ export default function Page() {
   const onGenerate = useCallback(async () => {
     if (!canGenerate) return;
 
-    // reset UI but keep history
     clearPoll();
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -252,8 +243,6 @@ export default function Page() {
     startTsRef.current = Date.now();
     setElapsedMs(0);
 
-    // Payload: keep aligned with your API route expectations.
-    // If your /api/generate currently expects only { prompt }, it will still work if you ignore extras.
     const payload = {
       prompt: prompt.trim(),
       negative_prompt: negativePrompt.trim(),
@@ -384,8 +373,7 @@ export default function Page() {
         </header>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* LEFT: Controls */}
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-925/30 bg-neutral-900 p-4">
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-sm text-neutral-300">Prompt</label>
@@ -541,7 +529,6 @@ export default function Page() {
             </div>
           </section>
 
-          {/* RIGHT: Preview */}
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-medium text-neutral-200">Preview</h2>
@@ -588,7 +575,6 @@ export default function Page() {
                 )}
 
                 {imageDataUrl && (
-                  // Using <img> avoids Next Image config for data URLs.
                   <img
                     src={imageDataUrl}
                     alt="Generated"
@@ -599,7 +585,6 @@ export default function Page() {
               </div>
             </div>
 
-            {/* History */}
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-medium text-neutral-200">Recent</h3>
