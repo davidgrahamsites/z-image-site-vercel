@@ -13,7 +13,6 @@ export default function Home() {
   }
 
   async function generate() {
-    setJobId(null);
     setStatus("SUBMITTING");
     setImageB64(null);
 
@@ -24,63 +23,47 @@ export default function Home() {
     });
 
     const j = await r.json();
-    if (!j?.jobId) {
-      setStatus("FAILED_SUBMIT");
-      return;
-    }
-
     setJobId(j.jobId);
 
     while (true) {
-      const s = await fetch(`/api/status?jobId=${encodeURIComponent(j.jobId)}`);
+      const s = await fetch(`/api/status?jobId=${j.jobId}`);
       const sj = await s.json();
+      setStatus(sj.status);
 
-      setStatus(sj?.status ?? "UNKNOWN");
-
-      if (sj?.status === "COMPLETED") {
-        const b64 = sj?.output?.image_b64 ?? null;
-        if (b64) setImageB64(b64);
+      if (sj.status === "COMPLETED") {
+        setImageB64(sj.output.image_b64);
         break;
       }
-
-      if (sj?.status === "FAILED" || sj?.status === "CANCELLED") break;
 
       await sleep(1200);
     }
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
+    <main style={{ padding: 24 }}>
       <h1>Z-Image Turbo</h1>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <input
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          style={{ flex: 1, padding: 10, border: "1px solid #ccc", borderRadius: 6 }}
+      <input
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        style={{ width: "100%", padding: 8 }}
+      />
+
+      <button onClick={generate} style={{ marginTop: 8 }}>
+        Generate
+      </button>
+
+      <div style={{ marginTop: 8 }}>
+        <div>jobId: {jobId}</div>
+        <div>status: {status}</div>
+      </div>
+
+      {imageB64 && (
+        <img
+          src={`data:image/png;base64,${imageB64}`}
+          style={{ marginTop: 12, maxWidth: "100%" }}
         />
-        <button
-          onClick={generate}
-          style={{ padding: "10px 14px", borderRadius: 6, border: "1px solid #ccc" }}
-        >
-          Generate
-        </button>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <div>jobId: {jobId ?? "-"}</div>
-        <div>status: {status ?? "-"}</div>
-      </div>
-
-      {imageB64 ? (
-        <div style={{ marginTop: 16 }}>
-          <img
-            src={`data:image/png;base64,${imageB64}`}
-            alt="result"
-            style={{ maxWidth: "100%", border: "1px solid #ddd", borderRadius: 8 }}
-          />
-        </div>
-      ) : null}
+      )}
     </main>
   );
 }
