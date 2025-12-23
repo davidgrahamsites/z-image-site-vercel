@@ -2,24 +2,20 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+type BackendStatus = "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
+
 type GenerateResponse =
   | { ok: true; jobId: string }
   | { ok: false; error: string };
 
 type StatusResponse =
-  | { ok: true; status: "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED"; output?: { image_b64?: string }; error?: string }
+  | {
+      ok: true;
+      status: BackendStatus;
+      output?: { image_b64?: string } | null;
+      error?: string | null;
+    }
   | { ok: false; error: string };
-
-type HistoryItem = {
-  id: string;
-  createdAt: number;
-  prompt: string;
-  negativePrompt: string;
-  imageDataUrl?: string;
-  status: "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
-  error?: string;
-  params: UiParams;
-};
 
 type UiParams = {
   aspect: "1:1" | "4:3" | "3:4" | "16:9" | "9:16";
@@ -28,6 +24,17 @@ type UiParams = {
   seed: number | "";
   numImages: 1;
   format: "png";
+};
+
+type HistoryItem = {
+  id: string;
+  createdAt: number;
+  prompt: string;
+  negativePrompt: string;
+  imageDataUrl?: string;
+  status: BackendStatus;
+  error?: string;
+  params: UiParams;
 };
 
 const DEFAULT_PARAMS: UiParams = {
@@ -78,7 +85,7 @@ export default function Page() {
   }, [params]);
 
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<"IDLE" | "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED">("IDLE");
+  const [status, setStatus] = useState<"IDLE" | BackendStatus>("IDLE");
   const [error, setError] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
@@ -91,12 +98,11 @@ export default function Page() {
   const startTsRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const canGenerate = useMemo(() => {
-    const busy = status === "QUEUED" || status === "IN_PROGRESS";
-    return !busy && prompt.trim().length > 0;
-  }, [status, prompt]);
+  const busy = status === "IN_QUEUE" || status === "IN_PROGRESS";
 
-  const busy = status === "QUEUED" || status === "IN_PROGRESS";
+  const canGenerate = useMemo(() => {
+    return !busy && prompt.trim().length > 0;
+  }, [busy, prompt]);
 
   const clearPoll = useCallback(() => {
     if (pollTimerRef.current) {
@@ -158,7 +164,8 @@ export default function Page() {
       }
 
       const s = data.status;
-      if (s === "QUEUED" || s === "IN_PROGRESS") {
+
+      if (s === "IN_QUEUE" || s === "IN_PROGRESS") {
         setStatus(s);
         updateHistoryItem(historyId, { status: s });
         return;
@@ -235,26 +242,19 @@ export default function Page() {
       createdAt,
       prompt: prompt.trim(),
       negativePrompt: negativePrompt.trim(),
-      status: "QUEUED",
+      status: "IN_QUEUE",
       params: normalizedParams,
     });
 
-    setStatus("QUEUED");
+    setStatus("IN_QUEUE");
     startTsRef.current = Date.now();
     setElapsedMs(0);
 
-    const payload = {
+    // Minimal payload to match your existing backend
+    const payload: any = {
       prompt: prompt.trim(),
-      negative_prompt: negativePrompt.trim(),
-      params: {
-        aspect: normalizedParams.aspect,
-        steps: normalizedParams.steps,
-        guidance: normalizedParams.guidance,
-        seed: normalizedParams.seed === "" ? undefined : normalizedParams.seed,
-        num_images: normalizedParams.numImages,
-        format: normalizedParams.format,
-      },
     };
+    if (negativePrompt.trim()) payload.negative_prompt = negativePrompt.trim();
 
     const res = await fetch("/api/generate", {
       method: "POST",
@@ -299,16 +299,19 @@ export default function Page() {
     setError("Cancelled locally");
   }, [busy, clearPoll]);
 
-  const onUseHistory = useCallback((h: HistoryItem) => {
-    setPrompt(h.prompt);
-    setNegativePrompt(h.negativePrompt);
-    setParams(h.params);
-    if (h.imageDataUrl) setImageDataUrl(h.imageDataUrl);
-    setError(h.error || null);
-    setStatus(h.status === "COMPLETED" ? "COMPLETED" : "IDLE");
-    setJobId(null);
-    clearPoll();
-  }, [clearPoll]);
+  const onUseHistory = useCallback(
+    (h: HistoryItem) => {
+      setPrompt(h.prompt);
+      setNegativePrompt(h.negativePrompt);
+      setParams(h.params);
+      if (h.imageDataUrl) setImageDataUrl(h.imageDataUrl);
+      setError(h.error || null);
+      setStatus(h.status === "COMPLETED" ? "COMPLETED" : "IDLE");
+      setJobId(null);
+      clearPoll();
+    },
+    [clearPoll]
+  );
 
   const onDownload = useCallback(() => {
     if (!imageDataUrl) return;
@@ -330,12 +333,12 @@ export default function Page() {
 
   const statusLabel = useMemo(() => {
     if (status === "IDLE") return "Idle";
-    if (status === "QUEUED") return "Queued";
+    if (status === "IN_QUEUE") return "Queued";
     if (status === "IN_PROGRESS") return "Generating";
     if (status === "COMPLETED") return "Completed";
     if (status === "FAILED") return "Failed";
     if (status === "CANCELLED") return "Cancelled";
-    return status;
+    return String(status);
   }, [status]);
 
   useEffect(() => {
@@ -414,7 +417,9 @@ export default function Page() {
                       <select
                         className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-2 py-2 text-sm outline-none focus:border-neutral-600"
                         value={params.aspect}
-                        onChange={(e) => setParams((p) => ({ ...p, aspect: e.target.value as UiParams["aspect"] }))}
+                        onChange={(e) =>
+                          setParams((p) => ({ ...p, aspect: e.target.value as UiParams["aspect"] }))
+                        }
                         disabled={busy}
                       >
                         <option value="1:1">1:1</option>
@@ -456,7 +461,9 @@ export default function Page() {
                       <input
                         className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-2 py-2 text-sm outline-none focus:border-neutral-600"
                         value={params.guidance}
-                        onChange={(e) => setParams((p) => ({ ...p, guidance: Number(e.target.value) }))}
+                        onChange={(e) =>
+                          setParams((p) => ({ ...p, guidance: Number(e.target.value) }))
+                        }
                         inputMode="numeric"
                         disabled={busy}
                       />
@@ -473,7 +480,10 @@ export default function Page() {
                       Defaults
                     </button>
                     <div className="text-xs text-neutral-500">
-                      Payload: <span className="font-mono text-neutral-400">prompt + negative_prompt + params</span>
+                      Payload:{" "}
+                      <span className="font-mono text-neutral-400">
+                        prompt + negative_prompt
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -568,7 +578,7 @@ export default function Page() {
                   <div className="flex h-full w-full flex-col items-center justify-center gap-3">
                     <div className="h-10 w-10 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-200" />
                     <div className="text-sm text-neutral-300">
-                      {status === "QUEUED" ? "Queued..." : "Generating..."}
+                      {status === "IN_QUEUE" ? "Queued..." : "Generating..."}
                     </div>
                     <div className="text-xs text-neutral-500">{formatTime(elapsedMs)}</div>
                   </div>
@@ -621,9 +631,7 @@ export default function Page() {
                           <div className="truncate text-xs text-neutral-500">Neg: {h.negativePrompt}</div>
                         )}
                       </div>
-                      <div className="shrink-0 text-xs text-neutral-500">
-                        {h.status}
-                      </div>
+                      <div className="shrink-0 text-xs text-neutral-500">{h.status}</div>
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
