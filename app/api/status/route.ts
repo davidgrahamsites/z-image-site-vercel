@@ -7,10 +7,11 @@ export async function GET(req: Request) {
   const jobId = searchParams.get("jobId");
 
   if (!jobId) {
-    return NextResponse.json(
-      { ok: false, error: "Missing jobId" },
-      { status: 400 }
-    );
+return NextResponse.json(
+  { ok: true, status: "PENDING", output: null },
+  { status: 200 }
+);
+
   }
 
   // TODO: replace with your real status lookup
