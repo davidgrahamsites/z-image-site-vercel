@@ -43,8 +43,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const RUNPOD_GENERATE_URL =
-  `${RUNPOD_BASE_URL}/v2/${RUNPOD_ENDPOINT_ID}/run`;
+  const RUNPOD_GENERATE_URL = `${RUNPOD_BASE_URL}/${RUNPOD_ENDPOINT_ID}/run`;
+
 
 console.log("RUNPOD_GENERATE_URL =", RUNPOD_GENERATE_URL);
 
