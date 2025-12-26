@@ -12,7 +12,6 @@ type GenerateBody = {
 };
 
 function makeJobId() {
-  // no external deps
   return `${crypto.randomUUID()}-u1`;
 }
 
@@ -31,19 +30,21 @@ export async function POST(req: Request) {
 
   const jobId = makeJobId();
 
-  // These must already exist in Vercel env vars (Project → Settings → Environment Variables)
-  const RUNPOD_GENERATE_URL = process.env.RUNPOD_GENERATE_URL;
+  // Use the env vars you already have in Vercel:
+  // RUNPOD_BASE_URL, RUNPOD_ENDPOINT_ID, RUNPOD_API_KEY
+  const RUNPOD_BASE_URL = process.env.RUNPOD_BASE_URL;
+  const RUNPOD_ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID;
   const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
 
-  if (!RUNPOD_GENERATE_URL || !RUNPOD_API_KEY) {
+  if (!RUNPOD_BASE_URL || !RUNPOD_ENDPOINT_ID || !RUNPOD_API_KEY) {
     return NextResponse.json(
-      { ok: false, error: "Server not configured (missing RUNPOD_GENERATE_URL or RUNPOD_API_KEY)" },
+      { ok: false, error: "Server not configured (missing RUNPOD_BASE_URL, RUNPOD_ENDPOINT_ID, or RUNPOD_API_KEY)" },
       { status: 500 }
     );
   }
 
-  // Fire the worker request. We expect the worker to accept jobId and later expose status by jobId.
-  let upstreamText = "";
+  const RUNPOD_GENERATE_URL = `${RUNPOD_BASE_URL}/v2/${RUNPOD_ENDPOINT_ID}/run`;
+
   try {
     const r = await fetch(RUNPOD_GENERATE_URL, {
       method: "POST",
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({ jobId, ...body }),
     });
 
-    upstreamText = await r.text();
+    const upstreamText = await r.text();
 
     if (!r.ok) {
       return NextResponse.json(
@@ -69,6 +70,5 @@ export async function POST(req: Request) {
     );
   }
 
-  // Return jobId immediately (client polls /api/status?jobId=...)
   return NextResponse.json({ ok: true, jobId });
 }
